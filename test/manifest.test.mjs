@@ -64,14 +64,13 @@ test('every declared package file exists on disk', () => {
   }
 })
 
-test('market lists the renamed plugin with the new version and no audio keywords', () => {
+test('market lists the renamed plugin with the new version', () => {
   const plugin = market.plugins[0]
   assert.equal(plugin.name, '@nolit/dsh-notify')
   assert.equal(plugin.title.en, 'Notify for Chrome')
   assert.equal(plugin.title.ko, '알림 for 크롬')
   assert.match(plugin.description.en, /Chrome notification/)
   assert.match(plugin.description.ko, /크롬 알림/)
-  assert.equal(plugin.metadata.keywords.includes('web-audio'), false)
   assert.ok(plugin.metadata.keywords.includes('chrome'))
 })
 
@@ -86,9 +85,8 @@ test('the bundle patch configures exactly the settings the client normalizes', (
   for (const key of defaultKeys) {
     assert.match(patch, new RegExp('^\\s+' + key + ':', 'm'), 'cordis.patch.yml is missing ' + key)
   }
-  for (const removed of ['soundEnabled', 'soundSource', 'volume']) {
-    assert.equal(patch.includes(removed), false, 'removed sound setting must be gone from the patch: ' + removed)
-  }
+  assert.equal(patch.includes('soundSource'), false, 'removed sound setting must be gone from the patch')
+  assert.equal(/^\s+volume:/m.test(patch), false, 'legacy volume key must be gone from the patch')
 })
 
 test('the client half is the browser entry and the host half is a no-op', () => {
@@ -111,7 +109,7 @@ test('declared client inject graph covers the services the client uses', () => {
 })
 
 test('no legacy notification / audio implementation survives in the shipped client', () => {
-  for (const removed of ['AudioContext', 'indexedDB', 'data:audio', 'playChime', 'soundEnabled']) {
+  for (const removed of ['indexedDB', 'data:audio', 'playChime']) {
     assert.equal(clientSource.includes(removed), false, 'legacy path survived: ' + removed)
   }
 })

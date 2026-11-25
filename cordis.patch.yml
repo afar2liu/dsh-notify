@@ -1,7 +1,8 @@
 # Notify for Chrome bundle layer.
 # The package is the bundle; this row activates its no-op Host half. Every
 # notification runs through the browser's Chrome / Web Notification API. No
-# local IPC, HTTP, ports, filesystem access, native notifier or audio engine.
+# local IPC, HTTP, ports, filesystem access or native notifier. Chimes are
+# synthesized in the browser; no audio file is shipped.
 - insert:
     - id: notify
       name: '@nolit/dsh-notify'
@@ -14,6 +15,8 @@
         suppressWhenFocused: false
         requireInteractionForApproval: true
         notifyOnSubagents: false
-        showPeakChip: true
-        notifyOnPeakChange: true
-        peakOnAnyProvider: false
+        onlyWhenHidden: false
+        soundEnabled: true
+        soundVolume: 60
+        doneSound: chime
+        questionSound: triple

@@ -35,8 +35,7 @@
     "test/typography.test.mjs",
     "test/locale.test.mjs",
     "test/manifest.test.mjs",
-    "package.json",
-    "test/peak.test.mjs"
+    "package.json"
   ],
   "engines": {
     "node": ">=24.9",
@@ -48,7 +47,7 @@
   "scripts": {
     "build": "node scripts/gen-locale.mjs && node scripts/build-client.mjs",
     "pretest": "npm run build",
-    "test": "node --test test/client.test.mjs test/typography.test.mjs test/locale.test.mjs test/manifest.test.mjs test/peak.test.mjs",
+    "test": "node --test test/client.test.mjs test/typography.test.mjs test/locale.test.mjs test/manifest.test.mjs",
     "docs:index": "node ../scripts/doc-index-track.mjs",
     "docs:check": "node ../scripts/doc-index-track.mjs --check"
   },

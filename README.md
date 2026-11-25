@@ -5,7 +5,7 @@ version: 2.0
 kind: readme
 status: active
 updated: 2026-11-05
-summary: Operator manual and behavior contract for Notify for Chrome (Korean: 알림 for 크롬) — Chrome/Web Notification only, silent in-app toast fallback, native DSH settings rows and typography, Windows/install-mode notification branches.
+summary: Operator manual and behavior contract for Notify for Chrome (Korean: 알림 for 크롬) — Chrome/Web Notification with synthesized chimes, silent in-app toast fallback, native DSH settings rows and typography, Windows/install-mode notification branches.
 -->
 
 > Status: active · Updated: 2026-11-07 · Package: `@nolit/dsh-notify` v`0.0.1-rc.6` · Korean display name: **알림 for 크롬** · Parent: `README.md` in the `dsh-plugins` workspace
@@ -33,7 +33,7 @@ milestones under that scheme; the scheme replaced them.
 | :--- | :--- | :--- |
 | Version scheme | per-track, drifting (`0.1.6 → 0.1.7 → 0.1.8 → 0.2.1`) | **`0.0.1-rc.N`** |
 | Package | `@nolit/dsh-notify-web` @ `0.2.1`, nested in `plugin/` | **`@nolit/dsh-notify`** @ `0.0.1-rc.6`, repository root |
-| Repository | Windows prototype at root | plugin at root, prototype preserved in `prototype-windows/` |
+| Repository | Windows prototype at root | plugin at root; the Windows prototype was removed |
 
 The `-web` suffix came from the 2026-10-24 recovery and was never the owner's choice;
 `PROVENANCE.md` documented the package as `@nolit/dsh-notify` the entire time while the files
@@ -54,8 +54,8 @@ Version numbers are the owner's decision. An agent must not choose, bump or "sta
   context are the only prerequisites.
 - **Silent toast fallback.** If the permission is denied/pending, the origin is not a secure
   context, the Notification API is unavailable, or the constructor/`onerror` fails, the event is
-  shown as the **native DSH toast** and nothing else. There is no sound, no second notification
-  channel, and no title-bar marker.
+  shown as the **native DSH toast** and nothing else. The toast itself is silent; there is no second
+  notification channel and no title-bar marker.
 - **One tab delivers.** Multiple tabs elect a leader (Web Locks, localStorage lease fallback) so an
   event is not announced once per tab. A focused tab always delivers.
 - **One alert per turn.** The host reports a failure and the idle transition it causes as two
@@ -64,9 +64,8 @@ Version numbers are the owner's decision. An agent must not choose, bump or "sta
   for the cooldown window, per session. The suppression is consumed by that one transition — the
   next turn that actually runs and finishes still notifies — and setting the cooldown to `0`
   disables it.
-- **No sound engine.** The plugin never synthesizes audio, never ships or stores audio, and never
-  uses `<audio>`/Web Audio/IndexedDB. When the OS notification has a sound, it is the **operating
-  system's own** notification sound.
+- **Named input requests.** A plan review raised through user questions is announced as "Plan review needed", and an approval raised the same way as "Approval needed"; other questions keep "Question waiting".
+- **Synthesized chimes, no audio files.** Each completion, approval and question plays a short chime generated with Web Audio; the plugin ships and stores no audio file. When the chime plays, its notification is `silent` so you hear one sound. When the browser has locked audio or sound is off, the operating system's own notification sound plays instead.
 
 ## 2. Windows and install-environment behavior
 
@@ -97,10 +96,10 @@ a standalone/minimal-ui/fullscreen display mode (or `navigator.standalone`), oth
 
 | Environment | `requireInteraction` | `silent` | `tag` |
 |---|---|---|---|
-| **Windows, installed app** | `true` for every kind — the Action Center keeps the alert while the app window is minimized, so a completion cannot be auto-dismissed | `false` (the OS plays the sound) | unique per event |
-| **Windows, browser tab** | follows the "Keep approval alerts open" setting; approval/question only | `false` | unique per event |
-| **macOS** | `false` — Chrome does not honour `requireInteraction`, so claiming it would misrepresent the behavior | `false` | unique per event |
-| **Linux / other** | follows the setting; approval/question only | `false` | unique per event |
+| **Windows, installed app** | `true` for every kind — the Action Center keeps the alert while the app window is minimized, so a completion cannot be auto-dismissed | `true` when the chime played, else `false` | unique per event |
+| **Windows, browser tab** | follows the "Keep approval alerts open" setting; approval/question only | `true` when the chime played, else `false` | unique per event |
+| **macOS** | `false` — Chrome does not honour `requireInteraction`, so claiming it would misrepresent the behavior | `true` when the chime played, else `false` | unique per event |
+| **Linux / other** | follows the setting; approval/question only | `true` when the chime played, else `false` | unique per event |
 
 - **Why a unique tag on Windows:** Windows replaces an existing notification that reuses a `tag`,
   which silently drops repeated events. Every event gets a fresh tag so completions accumulate in
@@ -148,8 +147,7 @@ Korean) renders native DSH settings surfaces only:
   colours and surfaces come from `--dsw-*` tokens. The plugin **injects no stylesheet**, sets **no
   font-family** and hardcodes **no pixel font size**.
 
-The page is grouped into four cards. The two owner-requested categories (2026-11-06) are the
-**DeepSeek peak timer** and **notifications**, in that order.
+The page is grouped into four cards: status, when to notify, browser support and environment.
 
 **알림 조건 (notification rows)**
 
@@ -159,51 +157,23 @@ The page is grouped into four cards. The two owner-requested categories (2026-11
 | Include subagents | off | also notify for subagent complete/error |
 | Hide completion alerts while focused | off | suppress completion while the DSH tab is focused |
 | Keep approval alerts open | on | `requireInteraction` for approval/question where supported (Windows/Linux) |
+| Only alert while this tab is in the background | off | suppress every alert while the DSH tab is focused |
 | Completion cooldown | 5 s | per-session grouping window |
 
-**딥시크 피크 타이머 (peak timer rows)**
+**Sound rows**
 
-| Row | Default | Meaning |
-|---|---|---|
-| Show peak countdown chip | on | 7-segment `HH:MM:SS` chip in the Session header: green off-peak, red at peak |
-| Announce peak changes | on | Chrome notification + `setAppBadge` when the billing window flips |
-| Show timer on other providers | **off** | also render the chip when the active route is *not* an official DeepSeek route |
+|| Row | Default | Meaning |
+||---|---|---|
+|| Play a chime | on | a synthesized chime with each completion, approval and question |
+|| Chime volume | 60 | 0–100 |
+|| Turn complete chime | chime | `chime` (ascending) or `cascade` (descending) |
+|| Input needed chime | triple | `triple` (urgent beeps) or `pulse` (double pulse) |
 
-### The peak timer only trusts official DeepSeek routes by default
-
-The peak/off-peak clock is a property of **DeepSeek's own API billing**
-([pricing footnote](https://api-docs.deepseek.com/quick_start/pricing)). DeepSeek publishes the
-off-peak discount for its own API; **a different service serving the same model may bill
-differently**, so the timer is a *reference*, not a fact, on any other route.
-
-The plugin therefore gates on the **provider id**, never on a model name:
-
-| Route | Chip by default |
-|---|---|
-| `deepseek-official` (official API-key route) | shown |
-| `deepseek-account` (official account route) | shown |
-| everything else (OpenCode, DeepInfra, Antigravity, any proxy/gateway) | **hidden** |
-
-Those two ids are the ones the official DSH packages register. **Provider ids differ between
-installations** — if your setup exposes the official DeepSeek route under a different id, turn on
-**Show timer on other providers** and the chip appears on every route. The default stays
-conservative because a wrong "50% off" claim is worse than a hidden widget.
-
-The live selection is read from `[data-provider-id][data-model-id]` on the model selector trigger,
-which is the same path DeepInfra's cost chip uses. Nothing is guessed from the model name.
-
-The settings card carries the caveat inline, in the owner's wording (2026-11-06):
-
-> 딥시크는 공식 모델 API에 대해서만 할인을 명시합니다. 같은 모델이라도 다른 제공자는 서비스 요금이
-> 다를 수 있으며 보장하지 않습니다. 그 경우 이 타이머는 참고 사항일 뿐입니다.
->
-> *DeepSeek states this discount only for its official model API. A different provider may charge
-> differently for the same model, and that is not guaranteed. In that case this timer is a reference
-> only.*
+Browsers unlock audio only after a click or key press on the page. Until then the chime stays silent and the OS sound plays instead.
 
 Preferences persist in the browser's `localStorage` under `dsh-notify-web:settings` (version 2).
 They are browser preferences, not Host configuration: the plugin's Host half is intentionally a
-no-op and exposes no settings namespace. No audio file is read, stored or referenced.
+no-op and exposes no settings namespace. No audio file is read, stored or referenced; chimes are generated in the browser.
 
 Guidance rules:
 
@@ -256,7 +226,7 @@ toast** rather than failing loudly, which is why the toast fallback exists.
 |---|---|---|
 | **Permission not granted** (`default`) | nothing from the OS | `new Notification(...)` **does not throw** — it looks successful and shows nothing. The plugin checks `Notification.permission === 'granted'` *before* constructing, so it routes to the toast instead. |
 | **Permission blocked** (`denied`) | nothing, and no prompt returns | `requestPermission()` resolves `'denied'` immediately; Chrome will not prompt again for the origin. Only the user can undo it in site settings. The plugin hides the Enable button, because a control that cannot work is not shown as a broken one. |
-| **Insecure origin** | nothing | `http://<LAN-IP>:3080` is not a secure context; Chrome refuses OS notifications. Use `https://` or `localhost`. Reported as `insecure`. A self-signed certificate needs to be trusted once in the browser; do **not** browse with certificate errors bypassed — notifications and the peak timer need a genuinely secure context. |
+| **Insecure origin** | nothing | `http://<LAN-IP>:3080` is not a secure context; Chrome refuses OS notifications. Use `https://` or `localhost`. Reported as `insecure`. A self-signed certificate needs to be trusted once in the browser; do **not** browse with certificate errors bypassed — notifications need a genuinely secure context. |
 | **No user gesture** | prompt never appears | `requestPermission()` needs a click. A call on page load is auto-denied; the plugin drives it from the Enable button only. |
 | **OS Do Not Disturb** / Focus Assist | nothing, or a silent banner | The OS owns this; the page cannot override it and cannot detect it. |
 | **Browser-level site mute** | nothing | Silent skip at the Chrome layer; indistinguishable from a delivered notification. |
@@ -271,12 +241,8 @@ toast** rather than failing loudly, which is why the toast fallback exists.
 ## 7. Privacy
 
 - No `XMLHttpRequest`, `WebSocket`, `EventSourc` or local port; no filesystem access.
-- **One network request**: the peak timer fetches the Chinese public-holiday list from
-  `raw.githubusercontent.com/NateScarlet/holiday-cn`. Nothing is sent but the request itself — no
-  prompt, code, session title, token or identifier. The response is cached in `localStorage` for 10
-  days. Disable **Show peak countdown chip** and the request never happens.
-- The only storage is the settings object, the tab-leader lease key and that holiday cache, all in
-  `localStorage`.
+- **No network requests.** The browser half makes no outbound request of any kind.
+- The only storage is the settings object and the tab-leader lease key, both in `localStorage`.
 - Notification bodies are fixed copy plus the session title (80 chars max); prompts, code and tool
   arguments are never included.
 - Notification clicks only focus the DSH tab; no external link is opened.
@@ -310,8 +276,8 @@ typography token contract, and the absence of every removed legacy path.
 - Code: MIT. See [LICENSE](LICENSE).
 - The package bundles **no fonts, logos or audio**. The manifest icon is the neutral clock SVG at
   [`icon.svg`](icon.svg)/[`market/icons/dsh-notify.svg`](market/icons/dsh-notify.svg).
-- The historical `docs/` and `prototype-windows/` trees are kept as history; neither is shipped in
-  the package (`package.json` `files`) nor referenced by the notification code path.
+- The historical `docs/` tree is kept as history; it is not shipped in the package (`package.json`
+  `files`) nor referenced by the notification code path.
 
 ---
 

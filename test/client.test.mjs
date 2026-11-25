@@ -3,9 +3,9 @@
  *
  * The plugin has exactly one notification channel: the Chrome / Web
  * Notification API. When Chrome cannot show it, the DSH toast is the silent
- * fallback. There is no audio engine, no BYO audio, no IndexedDB and no
- * self-authored stylesheet; those removals are asserted here as well as in the
- * typography contract.
+ * fallback. Chimes are synthesized with Web Audio; there is no audio file, no
+ * BYO audio, no IndexedDB and no self-authored stylesheet. Those removals are
+ * asserted here as well as in the typography contract.
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -86,6 +86,31 @@ const PLATFORM_DATASET = {
   other: '',
 }
 
+function makeAudio(state) {
+  const oscillators = []
+  let unlocked = state === 'running'
+  class FakeAudioContext {
+    constructor() {
+      this.state = state
+      this.currentTime = 0
+      this.destination = {}
+    }
+    resume() {
+      if (unlocked) this.state = 'running'
+      return Promise.resolve()
+    }
+    createGain() {
+      return { gain: { value: 1, setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }
+    }
+    createOscillator() {
+      const osc = { type: 'sine', frequency: { value: 0 }, connect() {}, start() {}, stop() {} }
+      oscillators.push(osc)
+      return osc
+    }
+  }
+  return { FakeAudioContext, oscillators, unlock: () => { unlocked = true } }
+}
+
 function makeApplyHarness(options = {}) {
   const {
     permission = 'granted',
@@ -131,8 +156,14 @@ function makeApplyHarness(options = {}) {
   sandbox.window.Notification = FakeNotification
   sandbox.window.navigator = navigator
   sandbox.window.matchMedia = matchMedia
-  sandbox.window.addEventListener = () => {}
-  sandbox.window.removeEventListener = () => {}
+  const windowListeners = {}
+  sandbox.window.addEventListener = (type, fn) => {
+    if (!windowListeners[type]) windowListeners[type] = new Set()
+    windowListeners[type].add(fn)
+  }
+  sandbox.window.removeEventListener = (type, fn) => windowListeners[type]?.delete(fn)
+  const audio = options.audio === undefined ? null : makeAudio(options.audio)
+  if (audio) sandbox.window.AudioContext = audio.FakeAudioContext
   sandbox.document = document
   sandbox.navigator = navigator
 
@@ -214,6 +245,11 @@ function makeApplyHarness(options = {}) {
     nextCalls,
     document,
     dispose,
+    oscillators: audio?.oscillators ?? [],
+    gesture() {
+      audio?.unlock()
+      for (const fn of [...(windowListeners.pointerdown ?? [])]) fn()
+    },
   }
 }
 
@@ -564,7 +600,7 @@ test('settings persist in localStorage under the plugin key without removed audi
   const stored = JSON.parse(harness.storage.getItem('dsh-notify-web:settings'))
   assert.equal(stored.version, 2)
   assert.equal(stored.settings.notifyOnComplete, false)
-  for (const removed of ['soundEnabled', 'soundSource', 'volume']) {
+  for (const removed of ['soundSource', 'volume']) {
     assert.equal(removed in stored.settings, false, removed + ' must not be persisted')
   }
   harness.dispose()
@@ -658,10 +694,119 @@ test('the section icon is a DSH-native icon component', () => {
 
 test('no legacy notification path remains in the shipped client', () => {
   const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
-  for (const removed of ['AudioContext', 'webkitAudioContext', 'indexedDB', 'data:audio', 'playChime', 'oscillator', 'soundEnabled', 'soundSource']) {
+  for (const removed of ['indexedDB', 'data:audio', 'playChime', 'soundSource']) {
     assert.equal(source.includes(removed), false, 'legacy sound/BYO path must be gone: ' + removed)
   }
   for (const forbidden of ['XMLHttpRequest', 'WebSocket', 'EventSource', 'child_process', 'sendBeacon']) {
     assert.equal(source.includes(forbidden), false, 'no network/IPC/system path: ' + forbidden)
   }
+})
+
+// --- sound -----------------------------------------------------------------
+
+test('a completion plays the done chime and silences the OS notification', () => {
+  const harness = makeApplyHarness({ permission: 'granted', audio: 'running' })
+  emitStatus(harness)
+  assert.deepEqual(harness.oscillators.map((osc) => osc.type), ['sine', 'sine', 'sine'])
+  assert.equal(harness.notifications[0].options.silent, true, 'the chime owns the sound')
+  harness.dispose()
+})
+
+test('an approval plays the question chime with square waves', () => {
+  const harness = makeApplyHarness({ permission: 'granted', audio: 'running' })
+  emitApproval(harness)
+  assert.deepEqual(harness.oscillators.map((osc) => osc.type), ['square', 'square', 'square'])
+  assert.equal(harness.notifications[0].options.silent, true)
+  harness.dispose()
+})
+
+test('turning sound off leaves the OS notification audible and plays nothing', () => {
+  const harness = makeApplyHarness({ permission: 'granted', audio: 'running' })
+  harness.core.actions.setSetting('soundEnabled', false)
+  emitStatus(harness)
+  assert.equal(harness.oscillators.length, 0)
+  assert.equal(harness.notifications[0].options.silent, false)
+  harness.dispose()
+})
+
+test('a locked audio context stays silent and leaves the sound to the OS', () => {
+  const harness = makeApplyHarness({ permission: 'granted', audio: 'suspended' })
+  emitStatus(harness)
+  assert.equal(harness.oscillators.length, 0)
+  assert.equal(harness.notifications[0].options.silent, false)
+  harness.dispose()
+})
+
+test('the first user gesture unlocks audio for later chimes', () => {
+  const harness = makeApplyHarness({ permission: 'granted', audio: 'suspended' })
+  harness.gesture()
+  emitStatus(harness)
+  assert.equal(harness.oscillators.length, 3)
+  assert.equal(harness.notifications[0].options.silent, true)
+  harness.dispose()
+})
+
+test('the preset selects the chime notes and an unknown preset falls back', () => {
+  const harness = makeApplyHarness({ permission: 'granted', audio: 'running' })
+  harness.core.actions.setSetting('doneSound', 'cascade')
+  emitStatus(harness)
+  assert.equal(harness.oscillators[0].frequency.value, 783.99, 'cascade opens on G5')
+  harness.core.actions.setSetting('doneSound', 'nonsense')
+  assert.equal(harness.core.getState().settings.doneSound, 'chime')
+  harness.dispose()
+})
+
+test('volume is clamped to 0-100 and zero volume plays nothing', () => {
+  const harness = makeApplyHarness({ permission: 'granted', audio: 'running' })
+  harness.core.actions.setSetting('soundVolume', 250)
+  assert.equal(harness.core.getState().settings.soundVolume, 100)
+  harness.core.actions.setSetting('soundVolume', 0)
+  emitStatus(harness)
+  assert.equal(harness.oscillators.length, 0)
+  assert.equal(harness.notifications[0].options.silent, false)
+  harness.dispose()
+})
+
+test('the sound test reports whether the browser let the chime play', () => {
+  const unlocked = makeApplyHarness({ permission: 'granted', audio: 'running' })
+  assert.equal(unlocked.core.actions.testSound('question'), 'played')
+  unlocked.dispose()
+  const locked = makeApplyHarness({ permission: 'granted', audio: 'suspended' })
+  assert.equal(locked.core.actions.testSound('done'), 'blocked')
+  locked.dispose()
+  const absent = makeApplyHarness({ permission: 'granted' })
+  assert.equal(absent.core.actions.testSound('done'), 'blocked')
+  absent.dispose()
+})
+
+test('onlyWhenHidden stays quiet while the tab is focused and alerts once it is not', () => {
+  const harness = makeApplyHarness({ permission: 'granted', audio: 'running' })
+  harness.core.actions.setSetting('onlyWhenHidden', true)
+  harness.document.hasFocus = () => true
+  emitStatus(harness, 's1')
+  emitApproval(harness, 'a-1')
+  assert.equal(harness.notifications.length, 0, 'focused tab stays quiet for every event')
+  assert.equal(harness.oscillators.length, 0)
+  harness.document.hasFocus = () => false
+  emitStatus(harness, 's2')
+  assert.equal(harness.notifications.length, 1, 'alert once the user is elsewhere')
+  harness.dispose()
+})
+
+test('a plan review and an approval over user questions are named as such', () => {
+  const harness = makeApplyHarness({ permission: 'granted', audio: 'running' })
+  const scope = { sessionId: 's1' }
+  const noop = () => {}
+  harness.handlers['user-questions/request'].call(scope, {
+    callId: 'plan-1',
+    questions: [{ id: 'plan', question: 'Review', detail: '# Plan', intent: { kind: 'plan-review', approve: 'Approve' } }],
+  }, noop)
+  assert.equal(harness.notifications[0].title, 'Plan review needed')
+  assert.equal(harness.oscillators.length, 3, 'a plan still plays the question chime')
+  harness.handlers['user-questions/request'].call({ sessionId: 's2' }, {
+    callId: 'cua-1',
+    questions: [{ id: 'app', question: 'Allow?', intent: { kind: 'approval', approve: 'Allow', reject: 'Deny' } }],
+  }, noop)
+  assert.equal(harness.notifications[1].title, 'Approval needed')
+  harness.dispose()
 })
