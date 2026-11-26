@@ -4,11 +4,11 @@
 version: 2.0
 kind: readme
 status: active
-updated: 2026-11-05
+updated: 2026-11-26
 summary: Operator manual and behavior contract for Notify for Chrome (Korean: 알림 for 크롬) — Chrome/Web Notification with synthesized chimes, silent in-app toast fallback, native DSH settings rows and typography, Windows/install-mode notification branches.
 -->
 
-> Status: active · Updated: 2026-11-07 · Package: `@nolit/dsh-notify` v`0.0.1-rc.6` · Korean display name: **알림 for 크롬** · Parent: `README.md` in the `dsh-plugins` workspace
+> Status: active · Updated: 2026-11-26 · Package: `@nolit/dsh-notify` v`0.0.1-rc.6` · Korean display name: **알림 for 크롬** · Parent: `README.md` in the `dsh-plugins` workspace
 
 **Notify for Chrome** turns DeepSeek Harness events into **Chrome notifications** (the Web
 Notification API, `new Notification(...)`). It has no native app, no ports, no IPC, no file queue
@@ -45,10 +45,10 @@ Version numbers are the owner's decision. An agent must not choose, bump or "sta
 
 | DSH event | Channel |
 |---|---|
-| `api-session/status` (`running=false`) | Chrome notification "Turn complete", root sessions only, 5 s cooldown |
-| `api-session/error` | Chrome notification "Turn failed", message truncated to 160 chars; suppresses the completion its own idle transition would raise |
-| `approval/request` | Chrome notification "Approval needed"; `next()` passes through immediately |
-| `user-questions/request` | Chrome notification "Question waiting"; `next()` passes through immediately |
+| `api-session/status` (`running=false`) | Chrome notification "Turn complete", root sessions only (unless `Include subagents` is on), 5 s cooldown (`running=true` clears that session's completion cooldown and error suppression) |
+| `api-session/error` | Chrome notification "Turn failed", root sessions only (unless `Include subagents` is on), message truncated to 160 chars; suppresses the completion its own idle transition would raise |
+| `approval/request` | Chrome notification "Approval needed", deduplicated per request ID for 30 s; `next()` passes through immediately |
+| `user-questions/request` | Chrome notification "Question waiting" (or "Plan review needed" / "Approval needed" per intent), deduplicated per request ID for 30 s; `next()` passes through immediately |
 
 - **Chrome first.** The plugin calls the Notification API. A granted permission and a secure
   context are the only prerequisites.
@@ -83,7 +83,7 @@ The sensitivity is per-platform, measured:
 | Windows | no | `requireInteraction` follows the setting, approval/question only |
 | Linux | either | same as the Windows browser tab |
 | macOS | either | `requireInteraction` is not honoured by Chrome, so it stays `false` |
-| Android / other | either | `silent: false`, unique `tag`; no persistence |
+| Android / other | either | `requireInteraction: false`; `silent` follows chime; unique `tag`; no persistence |
 
 Because a value like "Windows" next to a Linux host looks wrong, the row is labelled
 **Browser OS** (브라우저 OS) and carries that explanation inline.
@@ -147,9 +147,9 @@ Korean) renders native DSH settings surfaces only:
   colours and surfaces come from `--dsw-*` tokens. The plugin **injects no stylesheet**, sets **no
   font-family** and hardcodes **no pixel font size**.
 
-The page is grouped into four cards: status, when to notify, browser support and environment.
+The page is grouped into five cards: status, when to notify, sound, browser support and environment.
 
-**알림 조건 (notification rows)**
+**When to notify**
 
 | Row | Default | Meaning |
 |---|---|---|
@@ -162,12 +162,14 @@ The page is grouped into four cards: status, when to notify, browser support and
 
 **Sound rows**
 
-|| Row | Default | Meaning |
-||---|---|---|
-|| Play a chime | on | a synthesized chime with each completion, approval and question |
-|| Chime volume | 60 | 0–100 |
-|| Turn complete chime | chime | `chime` (ascending) or `cascade` (descending) |
-|| Input needed chime | triple | `triple` (urgent beeps) or `pulse` (double pulse) |
+| Row | Default | Meaning |
+|---|---|---|
+| Play a chime | on | a synthesized chime with each completion, approval and question |
+| Chime volume | 60 | 0–100 |
+| Turn complete chime | chime | `chime` (ascending) or `cascade` (descending) |
+| Input needed chime | triple | `triple` (urgent beeps) or `pulse` (double pulse) |
+
+The Sound card also provides **Play complete sample** and **Play input sample** buttons, and the Environment card includes **Reset settings** to restore defaults.
 
 Browsers unlock audio only after a click or key press on the page. Until then the chime stays silent and the OS sound plays instead.
 
@@ -186,7 +188,7 @@ Guidance rules:
 English is the default. Korean is used **only** while the host locale (`ctx.locale.active`) is
 Korean; a locale change switches the next notification and the settings strings live.
 
-- Sourc of truth: [`locale/en.json`](locale/en.json) and [`locale/ko.json`](locale/ko.json).
+- Source of truth: [`locale/en.json`](locale/en.json) and [`locale/ko.json`](locale/ko.json).
 - `scripts/gen-locale.mjs` bakes them into `lib/locale-table.js`; `scripts/build-client.mjs` inlines
   that table into `lib/client.js` (the browser loader cannot import JSON).
 - No hardcoded Korean exists outside the baked dictionary (a test enforces this).
@@ -203,19 +205,18 @@ operation is not guaranteed and is not tested.**
 | Capability | Chrome / Chromium | Firefox | Safari |
 |---|---|---|---|
 | `new Notification()` | yes | yes | 16+ only |
-| `badge` / `setAppBadge` | 81+ | no (falls back silently) | no |
-| `navigator.locks` (tab leader) | 69+ | yes | no (localStorage lease fallback) |
+| `AudioContext` (synthesized chimes) | yes | yes | yes (with `webkitAudioContext` fallback) |
+| `navigator.locks` (tab leader) | 69+ | yes | no (`localStorage` lease fallback) |
 | `requireInteraction` | Windows/Linux | **ignored** | **ignored** |
 | Installed-app notification branch | yes | n/a | n/a |
 
-**The plugin does not detect the browser.** It feature-detects (`Notification`, `isSecureContext`,
-`navigator.locks`, `setAppBadge`) and degrades, but it never claims a browser is supported just
-because it is not Chrome. A non-Chromium browser may look functional while behaving differently —
-for example Firefox accepts `requireInteraction` and ignores it, so an approval alert auto-dismisses
-even though the setting is on.
-
-Recommended minimum: **Chrome 81+** (when `setAppBadge` landed; everything else the plugin uses is
-older). Older Chrome still works, minus the badge channel.
+**Engine detection vs. feature detection.** The plugin detects the browser engine family
+(`chromium`, `firefox`, `safari`, `other` from `userAgent`, `vendor`, and `userAgentData.brands`)
+to display the Browser support card, and never claims a non-Chromium browser is supported.
+Runtime capabilities (`Notification`, `isSecureContext`, `navigator.locks`, `AudioContext`) are
+feature-detected and degrade gracefully. A non-Chromium browser may look functional while behaving
+differently — for example Firefox accepts `requireInteraction` and ignores it, so an approval alert
+auto-dismisses even though the setting is on.
 
 ### Security constraints that can stop a notification appearing
 
@@ -227,7 +228,7 @@ toast** rather than failing loudly, which is why the toast fallback exists.
 | **Permission not granted** (`default`) | nothing from the OS | `new Notification(...)` **does not throw** — it looks successful and shows nothing. The plugin checks `Notification.permission === 'granted'` *before* constructing, so it routes to the toast instead. |
 | **Permission blocked** (`denied`) | nothing, and no prompt returns | `requestPermission()` resolves `'denied'` immediately; Chrome will not prompt again for the origin. Only the user can undo it in site settings. The plugin hides the Enable button, because a control that cannot work is not shown as a broken one. |
 | **Insecure origin** | nothing | `http://<LAN-IP>:3080` is not a secure context; Chrome refuses OS notifications. Use `https://` or `localhost`. Reported as `insecure`. A self-signed certificate needs to be trusted once in the browser; do **not** browse with certificate errors bypassed — notifications need a genuinely secure context. |
-| **No user gesture** | prompt never appears | `requestPermission()` needs a click. A call on page load is auto-denied; the plugin drives it from the Enable button only. |
+| **No user gesture** | prompt never appears | `requestPermission()` needs a click. On the first real event with `permission === 'default'`, the plugin attempts `requestPermission()` once per page; if the browser blocks it without a gesture, the toast fallback covers it until the user presses the Enable button in Settings. |
 | **OS Do Not Disturb** / Focus Assist | nothing, or a silent banner | The OS owns this; the page cannot override it and cannot detect it. |
 | **Browser-level site mute** | nothing | Silent skip at the Chrome layer; indistinguishable from a delivered notification. |
 | **Tab closed** | nothing | No service-worker backend, so no delivery once the DSH tab is gone. |
@@ -240,7 +241,7 @@ toast** rather than failing loudly, which is why the toast fallback exists.
 
 ## 7. Privacy
 
-- No `XMLHttpRequest`, `WebSocket`, `EventSourc` or local port; no filesystem access.
+- No `XMLHttpRequest`, `WebSocket`, `EventSource` or local port; no filesystem access.
 - **No network requests.** The browser half makes no outbound request of any kind.
 - The only storage is the settings object and the tab-leader lease key, both in `localStorage`.
 - Notification bodies are fixed copy plus the session title (80 chars max); prompts, code and tool
@@ -257,10 +258,12 @@ node --check lib/client.js
 node --check lib/index.js
 ```
 
-Tests use mocked browser APIs (Notification, localStorage, Web Locks) and assert event filtering,
-cooldowns, approval/question pass-through, the Chrome-vs-toast channel decision, Windows/macOS/Linux
-parameter branches, locale switching, settings persistence, native-primitive rendering, the
-typography token contract, and the absence of every removed legacy path.
+Tests use mocked browser APIs (`Notification`, `AudioContext`, `localStorage`, Web Locks) and assert
+event filtering, cooldowns, error-to-completion suppression, approval/question pass-through,
+user-questions intent naming, synthesized chimes, `onlyWhenHidden`, the Chrome-vs-toast channel
+decision, Windows/macOS/Linux parameter branches, locale switching, settings persistence,
+native-primitive rendering, the typography token contract, and the absence of every removed legacy
+path.
 
 ## 9. Structure
 
@@ -269,15 +272,15 @@ typography token contract, and the absence of every removed legacy path.
 - `lib/locale-table.js` — generated locale dictionary (from `locale/*.json`).
 - `lib/index.js` — no-op Host half; registers the package only. No services, no I/O.
 - `cordis.patch.yml` — bundle row and default settings.
-- `market/index.json` — market/index entry (renamed titles, version, no audio keyword).
+- `market/index.json` — market/index entry (`@nolit/dsh-notify`, format 1).
 
 ## 10. License and assets
 
 - Code: MIT. See [LICENSE](LICENSE).
 - The package bundles **no fonts, logos or audio**. The manifest icon is the neutral clock SVG at
   [`icon.svg`](icon.svg)/[`market/icons/dsh-notify.svg`](market/icons/dsh-notify.svg).
-- The historical `docs/` tree is kept as history; it is not shipped in the package (`package.json`
-  `files`) nor referenced by the notification code path.
+- The historical `docs/` tree is kept as history (included in `package.json` `files`), and is not
+  referenced by the notification code path.
 
 ---
 
@@ -292,8 +295,8 @@ typography token contract, and the absence of every removed legacy path.
 
 **알림 for 크롬**은 DeepSeek Harness의 턴 완료·도구 승인·질문·오류를 **크롬 알림**(Web
 Notification API)으로 알립니다. 크롬이 알림을 막거나 표시할 수 없으면 **소리 없이 DSH 인앱
-토스트**로 대신 알립니다. 자체 오디오 엔진·BYO 오디오·자체 CSS·네이티브 앱/포트/파일 경로는
-모두 제거되었습니다.
+토스트**로 대신 알립니다. 알림음은 브라우저의 Web Audio API로 합성하며, 자체 오디오 파일·오디오
+저장소·자체 CSS·네이티브 앱/포트/파일 경로는 모두 제거되었습니다.
 
 - 설정은 **설정 → 알림 for 크롬**에서 하며, DSH 네이티브 컴포넌트(Switch/Button/Tag/Input/
   Toast)와 DSH 디자인·타이포그래피 토큰만 사용합니다.
