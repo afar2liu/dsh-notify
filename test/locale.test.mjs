@@ -1,7 +1,7 @@
 /**
  * Locale contract for Notify for Chrome.
  *
- * English is the default; Korean renders only while the host locale is Korean.
+ * English is the default; Chinese renders only while the host locale is Chinese.
  * locale/*.json is the single source of truth: scripts/gen-locale.mjs bakes it
  * into lib/locale-table.js and scripts/build-client.mjs inlines that table into
  * lib/client.js. This test fails if the baked client is stale.
@@ -54,21 +54,21 @@ function loadClient() {
 }
 
 const en = readJson('en.json')
-const ko = readJson('ko.json')
+const zh = readJson('zh.json')
 
-test('ko.json covers every key in en.json (and vice versa)', () => {
-  assert.deepEqual(Object.keys(ko).sort(), Object.keys(en).sort())
+test('zh.json covers every key in en.json (and vice versa)', () => {
+  assert.deepEqual(Object.keys(zh).sort(), Object.keys(en).sort())
 })
 
-test('every placeholder in an English string exists in Korean too', () => {
+test('every placeholder in an English string exists in Chinese too', () => {
   const placeholders = (value) => String(value).match(/\{\w+\}/g)?.sort() ?? []
   for (const key of Object.keys(en)) {
-    assert.deepEqual(placeholders(ko[key]), placeholders(en[key]), 'placeholder mismatch in ' + key)
+    assert.deepEqual(placeholders(zh[key]), placeholders(en[key]), 'placeholder mismatch in ' + key)
   }
 })
 
 test('the baked table matches locale/*.json exactly', () => {
-  assert.deepEqual(I18N, { en, ko }, 'lib/locale-table.js is stale; run npm run build')
+  assert.deepEqual(I18N, { en, zh }, 'lib/locale-table.js is stale; run npm run build')
   const generated = readFileSync(join(root, 'lib', 'locale-table.js'), 'utf8')
   const literal = /export const I18N = ([\s\S]*)$/.exec(generated)[1].trim().replace(/;\s*$/, '')
   assert.ok(
@@ -79,35 +79,35 @@ test('the baked table matches locale/*.json exactly', () => {
 
 test('market and locale display titles are the owner-named identity', () => {
   assert.equal(en.meta.title, 'Notify for Chrome')
-  assert.equal(ko.meta.title, '알림 for 크롬')
+  assert.equal(zh.meta.title, 'Chrome 通知')
   const market = JSON.parse(readFileSync(join(root, 'market', 'index.json'), 'utf8'))
   assert.equal(market.plugins[0].title.en, 'Notify for Chrome')
-  assert.equal(market.plugins[0].title.ko, '알림 for 크롬')
+  assert.equal(market.plugins[0].title.zh, 'Chrome 通知')
 })
 
-test('Korean strings are actually Korean where they must be', () => {
-  const korean = /[\uac00-\ud7a3]/
+test('Chinese strings are actually Chinese where they must be', () => {
+  const chinese = /[\u4e00-\u9fff]/
   for (const key of ['sectionTitle', 'title.complete', 'title.approval', 'action.enable', 'kinds.title']) {
-    assert.match(ko[key], korean, key + ' is not Korean')
+    assert.match(zh[key], chinese, key + ' is not Chinese')
   }
-  assert.equal(ko['title.complete'], '턴 완료')
-  assert.equal(ko['title.approval'], '승인 필요')
+  assert.equal(zh['title.complete'], '回合完成')
+  assert.equal(zh['title.approval'], '需要审批')
 })
 
-test('no hardcoded Korean remains outside the baked dictionary', () => {
+test('no hardcoded Chinese remains outside the baked dictionary', () => {
   const generated = readFileSync(join(root, 'lib', 'locale-table.js'), 'utf8')
   const literal = /export const I18N = ([\s\S]*)$/.exec(generated)[1].trim().replace(/;\s*$/, '')
   const stripped = clientSource.replace('const I18N = ' + literal, '')
-  assert.equal(/[\uac00-\ud7a3]/.test(stripped), false, 'Korean text must live only in the locale dictionary')
+  assert.equal(/[\u4e00-\u9fff]/.test(stripped), false, 'Chinese text must live only in the locale dictionary')
 })
 
-test('translate() defaults to English and switches only on a Korean locale', () => {
+test('translate() defaults to English and switches only on a Chinese locale', () => {
   const module = loadClient()
   const { translate, normalizeLang } = module.__test
   assert.equal(translate('en', 'title.complete'), 'Turn complete')
-  assert.equal(translate('ko', 'title.complete'), '턴 완료')
+  assert.equal(translate('zh', 'title.complete'), '回合完成')
   assert.equal(translate('fr', 'title.complete'), 'Turn complete', 'unknown locales fall back to English')
-  assert.equal(normalizeLang('ko-KR'), 'ko')
+  assert.equal(normalizeLang('zh-CN'), 'zh')
   assert.equal(normalizeLang('en-US'), 'en')
   assert.equal(normalizeLang(''), 'en')
   assert.equal(normalizeLang(undefined), 'en')

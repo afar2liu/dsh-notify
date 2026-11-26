@@ -5,10 +5,10 @@ version: 2.0
 kind: readme
 status: active
 updated: 2026-11-26
-summary: Operator manual and behavior contract for Notify for Chrome (Korean: 알림 for 크롬) — Chrome/Web Notification with synthesized chimes, silent in-app toast fallback, native DSH settings rows and typography, Windows/install-mode notification branches.
+summary: Operator manual and behavior contract for Notify for Chrome (Chinese: Chrome 通知) — Chrome/Web Notification with synthesized chimes, silent in-app toast fallback, native DSH settings rows and typography, Windows/install-mode notification branches.
 -->
 
-> Status: active · Updated: 2026-11-26 · Package: `@nolit/dsh-notify` v`0.0.1-rc.6` · Korean display name: **알림 for 크롬** · Parent: `README.md` in the `dsh-plugins` workspace
+> Status: active · Updated: 2026-11-26 · Package: `@nolit/dsh-notify` v`0.0.1-rc.6` · Chinese display name: **Chrome 通知** · Parent: `README.md` in the `dsh-plugins` workspace
 
 **Notify for Chrome** turns DeepSeek Harness events into **Chrome notifications** (the Web
 Notification API, `new Notification(...)`). It has no native app, no ports, no IPC, no file queue
@@ -86,7 +86,7 @@ The sensitivity is per-platform, measured:
 | Android / other | either | `requireInteraction: false`; `silent` follows chime; unique `tag`; no persistence |
 
 Because a value like "Windows" next to a Linux host looks wrong, the row is labelled
-**Browser OS** (브라우저 OS) and carries that explanation inline.
+**Browser OS** (浏览器 OS) and carries that explanation inline.
 
 The Chrome notification parameters branch on the **runtime platform** and the **install mode**.
 Platform detection order: DSH's `document.documentElement.dataset.platform` (the native shell sets
@@ -113,30 +113,28 @@ a standalone/minimal-ui/fullscreen display mode (or `navigator.standalone`), oth
 
 ## 3. Install
 
+> [!NOTE]
+> **Test project / local install only:** This package has **not** been published to the npm
+> registry and does **not** support online installation (`dsh plugin --profile web add @nolit/dsh-notify`
+> will not work). To use it, clone the repository locally and install it with `link:`:
+
+```bash
+git clone https://github.com/afar2liu/dsh-notify.git /path/dsh-notify
+dsh plugin --profile web add "link:/path/dsh-notify"
+```
+
 The package name stays `@nolit/dsh-notify`; only the **display identity** changed to
-"Notify for Chrome" / "알림 for 크롬". Renaming the npm package would break the live profile's
+"Notify for Chrome" / "Chrome 通知". Renaming the npm package would break the live profile's
 `link:` dependency.
 
-Local checkout (the live profile already links it):
-
-```bash
-dsh plugin --profile web add "link:/path/to/dsh-plugins/dsh-notify"
-```
-
-From npm after publishing:
-
-```bash
-dsh plugin --profile web add @nolit/dsh-notify
-```
-
 The package must be listed in the profile's `dsh.profile.bundles`. Reload the DSH page after
-installing. If `lib/client.js` has a syntax error only this plugin is disabled; the DSH core keeps
-working.
+installing (and run `npm run build` first if you edit `lib/client.src.js` or `locale/*.json`). If
+`lib/client.js` has a syntax error only this plugin is disabled; the DSH core keeps working.
 
 ## 4. Settings
 
-**Settings → Notify for Chrome** (English; the label is **알림 for 크롬** when the host locale is
-Korean) renders native DSH settings surfaces only:
+**Settings → Notify for Chrome** (English; the label is **Chrome 通知** when the host locale is
+Chinese) renders native DSH settings surfaces only:
 
 - a native `Tag` for the Chrome-notification status, native `Button` actions, native `Switch`
   toggles and a native `Input` for the cooldown;
@@ -185,14 +183,15 @@ Guidance rules:
   exercises the toast fallback.
 ## 5. Localization
 
-English is the default. Korean is used **only** while the host locale (`ctx.locale.active`) is
-Korean; a locale change switches the next notification and the settings strings live.
+English is the default. Chinese is used **only** while the host locale (`ctx.locale.active`) is
+Chinese (`zh` / `zh-CN` etc.); a locale change switches the next notification and the settings
+strings live.
 
-- Source of truth: [`locale/en.json`](locale/en.json) and [`locale/ko.json`](locale/ko.json).
+- Source of truth: [`locale/en.json`](locale/en.json) and [`locale/zh.json`](locale/zh.json).
 - `scripts/gen-locale.mjs` bakes them into `lib/locale-table.js`; `scripts/build-client.mjs` inlines
   that table into `lib/client.js` (the browser loader cannot import JSON).
-- No hardcoded Korean exists outside the baked dictionary (a test enforces this).
-- Display identity: English **Notify for Chrome**, Korean **알림 for 크롬**.
+- No hardcoded Chinese exists outside the baked dictionary (a test enforces this).
+- Display identity: English **Notify for Chrome**, Chinese **Chrome 通知**.
 
 ## 6. Limitations
 
@@ -281,26 +280,21 @@ path.
   [`icon.svg`](icon.svg)/[`market/icons/dsh-notify.svg`](market/icons/dsh-notify.svg).
 - The historical `docs/` tree is kept as history (included in `package.json` `files`), and is not
   referenced by the notification code path.
+- Upstream / reference repositories:
+  - <https://github.com/Nolitor/dsh-notify/>
+  - <https://github.com/dshiq04/dsh-notify>
 
 ---
 
 
-## 한국어 요약
+## 中文摘要
 
-**버전이 내려간 이유부터**: `0.0.1-rc.6`는 `0.2.1`보다 낮은 것이 아닙니다. `0.2.x`는 이
-플러그인의 버전이 아니라 같은 저장소에 있던 **Windows 프로토타입**의 버전이었고, 2026-11-05
-소유자 결정으로 모든 `@nolit` 패키지가 **`0.0.1-rc.N`** 단일 사다리로 재설정됐습니다.
-`0.0.1-rc.6`만 올라갑니다. 패키지명도 `@nolit/dsh-notify-web` → **`@nolit/dsh-notify`** 로
-바뀌었습니다. `-web`은 2026-10-24 복구 당시 붙은 것으로 소유자가 고른 이름이 아니었습니다.
+**Notify for Chrome（Chrome 通知）** 通过浏览器的 **Chrome 通知（Web Notification API）** 提醒 DeepSeek Harness 的回合完成、工具审批、提问与错误事件；当 Chrome 拦截或无法显示通知时，会自动回退为**静默的 DSH 应用内 Toast**。提示音通过浏览器的 Web Audio API 实时合成，不包含任何音频文件、音频存储、自定义 CSS、本地应用、端口或文件队列。
 
-**알림 for 크롬**은 DeepSeek Harness의 턴 완료·도구 승인·질문·오류를 **크롬 알림**(Web
-Notification API)으로 알립니다. 크롬이 알림을 막거나 표시할 수 없으면 **소리 없이 DSH 인앱
-토스트**로 대신 알립니다. 알림음은 브라우저의 Web Audio API로 합성하며, 자체 오디오 파일·오디오
-저장소·자체 CSS·네이티브 앱/포트/파일 경로는 모두 제거되었습니다.
-
-- 설정은 **설정 → 알림 for 크롬**에서 하며, DSH 네이티브 컴포넌트(Switch/Button/Tag/Input/
-  Toast)와 DSH 디자인·타이포그래피 토큰만 사용합니다.
-- 영어가 기본이고, 호스트 로케일이 한국어일 때만 한국어로 표시됩니다.
-- Windows에서는 플랫폼과 설치 환경(설치된 앱/브라우저 탭)에 따라 알림 파라미터가 달라집니다:
-  설치된 앱은 모든 알림을 닫을 때까지 유지하고, 브라우저 탭은 승인·질문만 유지합니다.
-  macOS에서는 `requireInteraction`을 사용하지 않습니다.
+- 当前为测试项目，尚未发布到 npm 仓库，不支持在线安装。使用时需先将仓库 clone 到本地，再通过 `dsh plugin --profile web add "link:/path/dsh-notify"` 安装。
+- 设置入口位于 **设置 → Chrome 通知**，仅使用 DSH 原生组件（Switch / Button / Tag / Input / Toast）和 DSH 设计与排版 Token。
+- 默认语言为英文，仅当宿主语言（locale）为中文时切换为中文显示。
+- Windows 下的通知参数会根据安装环境（已安装应用 / 浏览器标签页）有所区别：已安装应用下所有通知均保持常驻直到关闭，浏览器标签页下仅审批和提问通知保持常驻；macOS 下不使用 `requireInteraction`。
+- 项目参考源：
+  - <https://github.com/Nolitor/dsh-notify/>
+  - <https://github.com/dshiq04/dsh-notify>

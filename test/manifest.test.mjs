@@ -68,9 +68,9 @@ test('market lists the renamed plugin with the new version', () => {
   const plugin = market.plugins[0]
   assert.equal(plugin.name, '@nolit/dsh-notify')
   assert.equal(plugin.title.en, 'Notify for Chrome')
-  assert.equal(plugin.title.ko, '알림 for 크롬')
+  assert.equal(plugin.title.zh, 'Chrome 通知')
   assert.match(plugin.description.en, /Chrome notification/)
-  assert.match(plugin.description.ko, /크롬 알림/)
+  assert.match(plugin.description.zh, /Chrome 通知/)
   assert.ok(plugin.metadata.keywords.includes('chrome'))
 })
 

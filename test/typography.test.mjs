@@ -28,7 +28,7 @@ test('the plugin ships no stylesheet and injects no CSS into the document', () =
   assert.equal(source.includes('!important'), false)
 })
 
-test('no font-family is ever set (the host and the Korean pack own family)', () => {
+test('no font-family is ever set (the host and the CJK pack own family)', () => {
   assert.equal(/fontFamily/.test(source), false, 'use inherit only by not setting a family')
   assert.equal(/font-family/.test(source), false)
 })
@@ -101,7 +101,7 @@ test('REGRESSION GATE: no .5px hairline literal exists in any style declaration'
   )
 })
 
-test('REGRESSION GATE: the root section keeps Korean words together', () => {
+test('REGRESSION GATE: the root section keeps CJK words together', () => {
   const section = source.slice(source.indexOf('section: {'))
   const root = section.slice(0, section.indexOf('},'))
   assert.match(root, /wordBreak: 'keep-all'/, 'the root must wrap on word boundaries (CJK)')

@@ -608,27 +608,27 @@ test('settings persist in localStorage under the plugin key without removed audi
 
 // --- locale ----------------------------------------------------------------
 
-test('English is the default and Korean is used only for a Korean host locale', () => {
+test('English is the default and Chinese is used only for a Chinese host locale', () => {
   const english = makeApplyHarness({ permission: 'granted', locale: 'en-US' })
   emitStatus(english)
   assert.equal(english.notifications[0].title, 'Turn complete')
   english.dispose()
 
-  const korean = makeApplyHarness({ permission: 'granted', locale: 'ko-KR' })
-  emitStatus(korean)
-  assert.equal(korean.notifications[0].title, '턴 완료')
-  korean.dispose()
+  const chinese = makeApplyHarness({ permission: 'granted', locale: 'zh-CN' })
+  emitStatus(chinese)
+  assert.equal(chinese.notifications[0].title, '回合完成')
+  chinese.dispose()
 })
 
 test('a live locale switch changes the next notification language', () => {
   const harness = makeApplyHarness({ permission: 'granted', locale: 'en' })
   emitStatus(harness)
   assert.equal(harness.core.getState().lang, 'en')
-  harness.setLocale('ko')
-  assert.equal(harness.core.getState().lang, 'ko')
+  harness.setLocale('zh')
+  assert.equal(harness.core.getState().lang, 'zh')
   harness.core.actions.setSetting('completeCooldownMs', 0)
   harness.handlers['api-session/status']('s2', false)
-  assert.equal(harness.notifications.at(-1).title, '턴 완료')
+  assert.equal(harness.notifications.at(-1).title, '回合完成')
   harness.dispose()
 })
 
