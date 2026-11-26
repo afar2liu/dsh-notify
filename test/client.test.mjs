@@ -172,6 +172,8 @@ function makeApplyHarness(options = {}) {
   const effects = []
   const localeState = { active: locale }
   const localeListeners = new Set()
+  const sessionStatusListeners = new Set()
+  let sessionStatusSnapshot = new Map(options.sessionStatus ?? [])
   const rows = options.rows ?? {}
 
   const ctx = {
@@ -191,6 +193,17 @@ function makeApplyHarness(options = {}) {
       },
       scopeOf(scope) {
         return scope?.sessionId
+      },
+    },
+    uiSession: {
+      sessionStatus: {
+        getSnapshot() {
+          return sessionStatusSnapshot
+        },
+        subscribe(listener) {
+          sessionStatusListeners.add(listener)
+          return () => sessionStatusListeners.delete(listener)
+        },
       },
     },
     slots: {
@@ -230,6 +243,11 @@ function makeApplyHarness(options = {}) {
     for (const listener of [...localeListeners]) listener()
   }
 
+  function setSessionStatus(entries) {
+    sessionStatusSnapshot = new Map(entries)
+    for (const listener of [...sessionStatusListeners]) listener()
+  }
+
   return {
     module,
     sandbox,
@@ -241,6 +259,7 @@ function makeApplyHarness(options = {}) {
     storage,
     localeListeners,
     setLocale,
+    setSessionStatus,
     effects,
     nextCalls,
     document,
@@ -309,12 +328,12 @@ test('registers the native settings section, its DSH icon and the toast overlay'
 test('exported inject covers every ctx service apply() reads', () => {
   const harness = makeApplyHarness()
   const inject = harness.module.inject
-  for (const service of ['remote', 'sessions', 'slots', 'locale']) {
+  for (const service of ['remote', 'sessions', 'slots', 'locale', 'uiSession']) {
     assert.ok(inject.includes(service), 'inject must declare ' + service)
   }
   const applyBody = source.slice(source.indexOf('function apply('), source.indexOf('exports.apply'))
   const used = new Set([...applyBody.matchAll(/ctx\.([A-Za-z_$][\w$]*)/g)].map((match) => match[1]))
-  for (const service of ['remote', 'sessions', 'slots', 'locale']) {
+  for (const service of ['remote', 'sessions', 'slots', 'locale', 'uiSession']) {
     assert.ok(used.has(service), 'apply() still reads ctx.' + service + '; keep it in inject')
   }
   harness.dispose()
@@ -808,5 +827,66 @@ test('a plan review and an approval over user questions are named as such', () =
     questions: [{ id: 'app', question: 'Allow?', intent: { kind: 'approval', approve: 'Allow', reject: 'Deny' } }],
   }, noop)
   assert.equal(harness.notifications[1].title, 'Approval needed')
+  harness.dispose()
+})
+
+test('uiSession.sessionStatus notifies for pending approvals, questions and plan reviews even when waterfall is intercepted', () => {
+  const harness = makeApplyHarness({ permission: 'granted' })
+  // Pending approval registered in uiSession (e.g. dsh-client-ui-approval consumed the waterfall)
+  harness.setSessionStatus([
+    ['s1', { running: true, pendingInteraction: { kind: 'approval', key: 'app-1', sessionId: 's1', callId: 'call-1' } }],
+  ])
+  assert.equal(harness.notifications.length, 1)
+  assert.equal(harness.notifications[0].title, 'Approval needed')
+
+  // Unrelated status update while the same approval card is still open must not re-notify
+  harness.setSessionStatus([
+    ['s1', { running: true, pendingInteraction: { kind: 'approval', key: 'app-1', sessionId: 's1', callId: 'call-1' } }],
+    ['s2', { running: true, pendingInteraction: undefined }],
+  ])
+  assert.equal(harness.notifications.length, 1)
+
+  // Pending question carrying ACP approval intent
+  harness.setSessionStatus([
+    ['s1', { running: true, pendingInteraction: undefined }],
+    ['s2', {
+      running: true,
+      pendingInteraction: {
+        kind: 'question',
+        key: 'q-1',
+        sessionId: 's2',
+        callId: 'call-2',
+        questions: [{ id: 'perm', question: 'Allow?', intent: { kind: 'approval', approve: 'Allow' } }],
+      },
+    }],
+  ])
+  assert.equal(harness.notifications.length, 2)
+  assert.equal(harness.notifications[1].title, 'Approval needed')
+
+  // Plan review interaction
+  harness.setSessionStatus([
+    ['s3', { running: true, pendingInteraction: { kind: 'plan-review', key: 'p-1', sessionId: 's3', questions: [{ id: 'plan' }] } }],
+  ])
+  assert.equal(harness.notifications.length, 3)
+  assert.equal(harness.notifications[2].title, 'Plan review needed')
+
+  // Read-only transcript review card must be ignored
+  harness.setSessionStatus([
+    ['s4', { running: false, pendingInteraction: { kind: 'question', key: 'rev-1', sessionId: 's4', review: [{ id: 'q', answers: ['a'] }] } }],
+  ])
+  assert.equal(harness.notifications.length, 3)
+  harness.dispose()
+})
+
+test('pendingInteraction deduplicates with waterfall events for the same callId', () => {
+  const harness = makeApplyHarness({ permission: 'granted' })
+  const noop = () => {}
+  harness.handlers['approval/request'].call({ sessionId: 's1' }, { callId: 'c-dup', toolName: 'bash' }, noop)
+  assert.equal(harness.notifications.length, 1)
+
+  harness.setSessionStatus([
+    ['s1', { running: true, pendingInteraction: { kind: 'approval', key: 'k-dup', sessionId: 's1', callId: 'c-dup' } }],
+  ])
+  assert.equal(harness.notifications.length, 1)
   harness.dispose()
 })
